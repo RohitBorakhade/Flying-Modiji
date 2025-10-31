@@ -1,35 +1,30 @@
-Title: Flying Modiji 🕹️
-Description:
-Interactive browser game built using HTML5, CSS3, and JavaScript.
-It uses the Canvas API for animation rendering and DOM event handling for real-time gameplay.
-Designed and published by Rohit Borakhade on GitHub Pages.
+🕊️ Flying Maulana Modi
 
-⸻
+A funny little browser game inspired by Flappy Bird, featuring Modiji as the flying hero dodging Rahul Gandhi pipes.
+Built entirely with HTML, CSS, and JavaScript — no libraries, just pure fun!
 
-🎮 Features
-	•	Smooth real-time gameplay
-	•	Dynamic obstacles and scoring system
-	•	Lightweight browser-based design
-	•	Works on mobile and desktop browsers
-
-⸻
-
-🧠 Technologies Used
-	•	HTML5
-	•	CSS3
-	•	JavaScript
-	•	GitHub Pages
-
-⸻
+🎮 Play it here: 👉 Game Preview Link
 
 🚀 How to Play
-	1.	Open the live link (GitHub Pages).
-	2.	Tap or press the spacebar to make Modiji fly.
-	3.	Avoid obstacles and keep your score rising!
 
-⸻
+Press Spacebar or Tap to make Modiji flap and stay in the air.
+Avoid hitting the Rahul Gandhi pipes!
+The longer you survive, the higher your score climbs!
+When you crash… well, you’ll hear it 😅
+🧠 Features
 
-👨‍💻 Developer
+Custom graphics (bird.png, rahul.webp)
+Background music loop at 30% volume
+Jump sound effect (maka.mp3)
+Game over sound (gameover.mp3)
+Smooth, slowed-down motion for an easier play
+💻 Tech Stack
 
-Rohit Borakhade
-📧 borakhade03@gmail.com
+HTML5 Canvas
+CSS3 (Gradient Background)
+Vanilla JavaScript
+🧩 Setup
+
+Clone the repo
+git clone https://github.com/yourusername/flying-maulana-modi.git
+cd flying-maulana-modi
