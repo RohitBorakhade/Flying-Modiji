@@ -1,13 +1,306 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Flying Modiji</title>
-  <link rel="stylesheet" href="style.css" />
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Flying Game — Your Theme</title>
+<style>
+  :root{ --bg:#87ceeb; --ground:#d9ad7c; --ui:rgba(0,0,0,.7); }
+  html,body{ height:100%; margin:0; font-family:Inter,system-ui,Segoe UI,Roboto,Arial; background:var(--bg); display:flex; align-items:center; justify-content:center; }
+  #gameWrap{ width:100%; max-width:720px; margin:24px; position:relative; }
+  canvas{ width:100%; border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.2); background: linear-gradient(#bfe9ff, #87ceeb 60%); display:block; }
+  .ui {
+    position:absolute; left:12px; top:12px; color:white; text-shadow:0 1px 2px rgba(0,0,0,.45);
+    font-weight:700; display:flex; gap:12px; align-items:center;
+  }
+  .score { font-size:28px; background: rgba(0,0,0,.25); padding:6px 12px; border-radius:8px; }
+  .small { font-size:14px; opacity:.95; background: rgba(255,255,255,.15); padding:6px 10px; border-radius:8px; }
+  .overlay {
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none;
+  }
+  .menu {
+    pointer-events:auto; background: rgba(255,255,255,.95); padding:20px; border-radius:12px; text-align:center; width:88%;
+    max-width:420px; box-shadow:0 8px 30px rgba(0,0,0,.25);
+  }
+  .menu h1{ margin:0 0 8px; font-size:20px; }
+  .menu p{ margin:6px 0 14px; color:#333; }
+  .btn { display:inline-block; padding:8px 16px; border-radius:8px; background:#2d8cff; color:white; font-weight:700; cursor:pointer; text-decoration:none;}
+  .muted{ color:#666; font-size:13px; margin-top:8px; }
+  footer{ text-align:center; margin-top:12px; color:#fff; font-size:12px; text-shadow:none; opacity:.95;}
+  @media (max-width:420px){ .menu{ width:92%; } .score{ font-size:22px; } }
+</style>
 </head>
 <body>
-  <canvas id="gameCanvas"></canvas>
-  <script src="script.js"></script>
+  <div id="gameWrap">
+    <div class="ui">
+      <div class="score" id="score">0</div>
+      <div class="small" id="high">High: 0</div>
+    </div>
+
+    <canvas id="game"></canvas>
+
+    <div class="overlay" id="overlay">
+      <div class="menu" id="menu">
+        <h1>Fly High — Practice Mode</h1>
+        <p>Tap / Click / Press Space to flap. Avoid the pipes. Try to beat your high score!</p>
+        <div style="display:flex;gap:10px;justify-content:center;">
+          <a class="btn" id="startBtn">Start</a>
+          <a class="btn" id="demoBtn" style="background:#22c55e">Demo</a>
+        </div>
+        <div class="muted">Original, safe artwork — replace sprites later if you want.</div>
+      </div>
+    </div>
+
+    <footer id="footer" style="display:none">Click to flap — Tap on mobile</footer>
+  </div>
+
+<script>
+/*
+  Flappy-style game with original vector art.
+  Paste into index.html and upload to your repo.
+*/
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d', { alpha: true });
+
+let W, H, scale;
+function resize() {
+  W = canvas.clientWidth;
+  H = Math.round(W * 9/16); // 16:9 canvas
+  canvas.width = W;
+  canvas.height = H;
+  scale = W / 720;
+}
+window.addEventListener('resize', resize);
+resize();
+
+/* Game variables */
+let frames = 0;
+let score = 0;
+let high = Number(localStorage.getItem('fm_high')||0);
+document.getElementById('high').textContent = 'High: ' + high;
+document.getElementById('score').textContent = score;
+
+const GRAVITY = 0.45 * scale;
+const FLAP = -9.5 * scale;
+const PIPE_GAP = 150 * scale;
+const PIPE_W = 80 * scale;
+const PIPE_INTERVAL = 110; // frames
+const PIPE_SPEED = 2.6 * scale;
+
+let player, pipes, running, showOverlay=true;
+
+/* Simple vector character (original, non-real-person) */
+function drawPlayer(x,y,rotation){
+  ctx.save();
+  ctx.translate(x,y);
+  ctx.rotate(rotation);
+  // body (rounded square)
+  ctx.fillStyle = '#ffd166';
+  roundRect(ctx, -24*scale, -18*scale, 48*scale, 36*scale, 8*scale);
+  ctx.fill();
+  // cap/hat
+  ctx.fillStyle = '#ef476f';
+  roundRect(ctx, -24*scale, -26*scale, 48*scale, 14*scale, 6*scale);
+  ctx.fill();
+  // eyes
+  ctx.fillStyle = '#222';
+  ctx.beginPath(); ctx.arc(-8*scale, -2*scale, 3.5*scale,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(8*scale, -2*scale, 3.5*scale,0,Math.PI*2); ctx.fill();
+  // smile
+  ctx.strokeStyle = 'rgba(0,0,0,.6)';
+  ctx.lineWidth = 1.6*scale;
+  ctx.beginPath(); ctx.arc(0,6*scale,8*scale,0,Math.PI); ctx.stroke();
+  ctx.restore();
+}
+
+/* Draw a pipe pair */
+function drawPipe(x, y, height, top){
+  ctx.fillStyle = '#2b9348';
+  // pipe body
+  roundRect(ctx, x, top ? 0 : y, PIPE_W, top ? height : H - y, 10*scale);
+  ctx.fill();
+  // inner rim
+  ctx.fillStyle = '#1b5e20';
+  ctx.fillRect(x + PIPE_W*0.1, top ? height - 8*scale : y + 0.1, PIPE_W*0.8, 8*scale);
+}
+
+/* helper roundRect */
+function roundRect(ctx, x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);
+  ctx.arcTo(x,y,x+w,y,r);
+  ctx.closePath();
+}
+
+/* init game state */
+function reset(){
+  frames = 0;
+  score = 0;
+  document.getElementById('score').textContent = 0;
+  player = { x: 120*scale, y: H/2, vy: 0, rot: 0, w:48*scale, h:36*scale };
+  pipes = [];
+  running = true;
+  showOverlay = false;
+  document.getElementById('overlay').style.display = 'none';
+  document.getElementById('footer').style.display = 'block';
+}
+
+/* spawn a pipe pair */
+function spawnPipe(){
+  const topMin = 60*scale;
+  const topMax = H - 60*scale - PIPE_GAP;
+  const topH = Math.floor(Math.random()*(topMax-topMin)+topMin);
+  const bottomY = topH + PIPE_GAP;
+  pipes.push({ x: W + 10*scale, topH: topH, bottomY: bottomY, passed: false });
+}
+
+/* collision check */
+function collideRect(x1,y1,w1,h1, x2,y2,w2,h2){
+  return !(x1+w1 < x2 || x1 > x2+w2 || y1+h1 < y2 || y1 > y2+h2);
+}
+
+/* main loop */
+let lastTime = 0;
+function loop(ts){
+  if(!lastTime) lastTime = ts;
+  const dt = ts - lastTime;
+  lastTime = ts;
+
+  frames++;
+  // spawn pipes periodically
+  if(frames % PIPE_INTERVAL === 0) spawnPipe();
+
+  // update player
+  player.vy += GRAVITY;
+  player.y += player.vy;
+  player.rot = Math.max(-0.8, Math.min(1.0, player.vy / 20));
+
+  // update pipes
+  for(let p of pipes){
+    p.x -= PIPE_SPEED;
+    // score when pass
+    if(!p.passed && p.x + PIPE_W < player.x - player.w/2){
+      p.passed = true;
+      score++;
+      document.getElementById('score').textContent = score;
+      if(score > high){ high = score; localStorage.setItem('fm_high', high); document.getElementById('high').textContent = 'High: ' + high; }
+    }
+  }
+  // remove off-screen
+  pipes = pipes.filter(p => p.x + PIPE_W > -50*scale);
+
+  // collision with ground/ceiling
+  if(player.y + player.h/2 >= H - 8*scale || player.y - player.h/2 <= 0){
+    running = false;
+  }
+
+  // check collision with pipes
+  for(let p of pipes){
+    // top pipe rect
+    if(collideRect(player.x - player.w/2, player.y - player.h/2, player.w, player.h, p.x, 0, PIPE_W, p.topH)){
+      running = false;
+    }
+    // bottom pipe rect
+    if(collideRect(player.x - player.w/2, player.y - player.h/2, player.w, player.h, p.x, p.bottomY, PIPE_W, H - p.bottomY)){
+      running = false;
+    }
+  }
+
+  // draw
+  drawScene();
+
+  if(!running){
+    // show Game Over overlay
+    showOverlay = true;
+    document.getElementById('overlay').style.display = 'flex';
+    document.getElementById('menu').innerHTML = `
+      <h1>Game Over</h1>
+      <p>Score: <strong>${score}</strong> — High: <strong>${high}</strong></p>
+      <div style="display:flex;gap:10px;justify-content:center;">
+        <a class="btn" id="startBtn">Play Again</a>
+        <a class="btn" id="shareBtn" style="background:#ff6b6b">Reset High</a>
+      </div>
+      <div class="muted" style="margin-top:10px">Click Start to play again</div>
+    `;
+    document.getElementById('startBtn').addEventListener('click', ()=>{ reset(); });
+    document.getElementById('shareBtn').addEventListener('click', ()=>{ localStorage.setItem('fm_high', 0); high = 0; document.getElementById('high').textContent='High: 0'; });
+    document.getElementById('footer').style.display = 'none';
+    return;
+  }
+
+  requestAnimationFrame(loop);
+}
+
+function drawScene(){
+  // clear
+  ctx.clearRect(0,0,W,H);
+  // background: simple sky + clouds suggestion
+  drawBackground();
+  // pipes
+  for(let p of pipes){
+    drawPipe(p.x, 0, p.topH, true);
+    drawPipe(p.x, p.bottomY, H - p.bottomY, false);
+  }
+  // ground strip
+  ctx.fillStyle = '#b77b4b';
+  ctx.fillRect(0, H - 8*scale, W, 8*scale);
+
+  // player
+  drawPlayer(player.x, player.y, player.rot);
+
+  // subtle HUD drop shadow already provided by CSS
+}
+
+/* draw lightweight background (e.g., clouds) */
+function drawBackground(){
+  // soft sun
+  ctx.beginPath();
+  ctx.fillStyle = 'rgba(255,230,120,0.9)';
+  ctx.arc(W - 80*scale, 80*scale, 40*scale, 0, Math.PI*2);
+  ctx.fill();
+
+  // clouds
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  drawCloud(120*scale, 80*scale, 1.0);
+  drawCloud(260*scale, 40*scale, 0.8);
+  drawCloud(380*scale, 120*scale, 1.1);
+}
+function drawCloud(x,y,scaleC){
+  ctx.beginPath();
+  const s = 18*scale * scaleC;
+  ctx.arc(x, y, s*1.2, 0, Math.PI*2);
+  ctx.arc(x + s*1.1, y - s*0.2, s, 0, Math.PI*2);
+  ctx.arc(x + s*2.1, y + s*0.1, s*0.9, 0, Math.PI*2);
+  ctx.fill();
+}
+
+/* input handlers */
+function flap(){
+  if(!running) return;
+  player.vy = FLAP;
+  // small sound placeholder (can add audio)
+}
+window.addEventListener('keydown', (e)=>{
+  if(e.code === 'Space'){ e.preventDefault(); flap(); }
+});
+canvas.addEventListener('mousedown', (e)=> { flap(); });
+canvas.addEventListener('touchstart', (e)=> { e.preventDefault(); flap(); }, {passive:false});
+
+/* start/demo buttons */
+document.getElementById('startBtn').addEventListener('click', ()=>{ reset(); requestAnimationFrame(loop); });
+document.getElementById('demoBtn').addEventListener('click', ()=>{
+  // demo: small auto-play to preview
+  reset();
+  // auto flap every 420ms for demo
+  const demoInt = setInterval(()=>{ if(!running) clearInterval(demoInt); flap(); }, 420);
+  requestAnimationFrame(loop);
+});
+
+/* initial overlay content already present */
+</script>
 </body>
 </html>
